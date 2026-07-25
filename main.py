@@ -1,12 +1,12 @@
 import logging
 import os
-from telegram import Update
-from telegram.ext import Application, CommandHandler, MessageHandler, filters, ContextTypes
+from telegram import Update, Bot
+from telegram.ext import Updater, CommandHandler, MessageHandler, Filters, CallbackContext
 
 # ========= ТОКЕН =========
-TOKEN = os.environ.get("8996710618:AAEBYipmbRh6GMz5yqLTrjmr9yXfIVcfFgY")
+TOKEN = os.environ.get("TELEGRAM_TOKEN")
 
-# ========= НАСТРОЙКИ ЛОГИРОВАНИЯ =========
+# ========= НАСТРОЙКИ =========
 logging.basicConfig(
     format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
     level=logging.INFO
@@ -14,10 +14,10 @@ logging.basicConfig(
 logger = logging.getLogger(__name__)
 
 # ========= ОБРАБОТЧИКИ =========
-async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
+def start(update: Update, context: CallbackContext):
     user = update.effective_user
     logger.info(f"Пользователь {user.first_name} запустил бота")
-    await update.message.reply_text(
+    update.message.reply_text(
         f"👋 Привет, {user.first_name}!\n\n"
         f"Я бот для поиска ценных ставок ⚽\n"
         f"Работаю 24/7 на сервере 🚀\n\n"
@@ -26,8 +26,8 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
         f"🔹 /help - помощь"
     )
 
-async def help_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    await update.message.reply_text(
+def help_command(update: Update, context: CallbackContext):
+    update.message.reply_text(
         "🤖 **Как я работаю:**\n\n"
         "1️⃣ Анализирую статистику команд\n"
         "2️⃣ Сравниваю с коэффициентами букмекеров\n"
@@ -41,7 +41,7 @@ async def help_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
         "• /help - эта справка"
     )
 
-async def today(update: Update, context: ContextTypes.DEFAULT_TYPE):
+def today(update: Update, context: CallbackContext):
     message = "📊 **СТАВКИ НА СЕГОДНЯ**\n\n"
 
     message += "═══════════════════════\n"
@@ -69,35 +69,64 @@ async def today(update: Update, context: ContextTypes.DEFAULT_TYPE):
     message += "⚠️ Демо-версия\n"
     message += "🔜 Реальные ставки скоро!"
 
-    await update.message.reply_text(message)
+    update.message.reply_text(message)
 
-async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
+def handle_message(update: Update, context: CallbackContext):
     text = update.message.text.lower()
 
     if "ставк" in text or "прогноз" in text:
-        await update.message.reply_text("📊 Напиши /today для ставок!")
+        update.message.reply_text("📊 Напиши /today для ставок!")
     elif "привет" in text:
-        await update.message.reply_text("👋 Привет! Используй /help")
+        update.message.reply_text("👋 Привет! Используй /help")
     else:
-        await update.message.reply_text("🤖 Я знаю: /start, /help, /today")
+        update.message.reply_text("🤖 Я знаю: /start, /help, /today")
+
+def error_handler(update: Update, context: CallbackContext):
+    """Логирование ошибок"""
+    logger.error(f"Update {update} caused error {context.error}")
 
 # ========= ГЛАВНАЯ ФУНКЦИЯ =========
 def main():
     """Запуск бота"""
     try:
-        # Создаём приложение
-        app = Application.builder().token(TOKEN).build()
+        # Создаём Updater
+        updater = Updater(TOKEN, use_context=True)
+        dp = updater.dispatcher
 
         # Добавляем обработчики
-        app.add_handler(CommandHandler("start", start))
-        app.add_handler(CommandHandler("help", help_command))
-        app.add_handler(CommandHandler("today", today))
-        app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_message))
+        dp.add_handler(CommandHandler("start", start))
+        dp.add_handler(CommandHandler("help", help_command))
+        dp.add_handler(CommandHandler("today", today))
+        dp.add_handler(MessageHandler(Filters.text & ~Filters.command, handle_message))
+        dp.add_error_handler(error_handler)
 
         logger.info("🤖 Бот успешно запущен!")
 
-        # Запускаем бота
-        app.run_polling()
+        # Запускаем
+        updater.start_polling()
+
+        # Держим сервер живым
+        from http.server import HTTPServer, BaseHTTPRequestHandler
+
+        class SimpleHandler(BaseHTTPRequestHandler):
+            def do_GET(self):
+                self.send_response(200)
+                self.send_header('Content-type', 'text/html')
+                self.end_headers()
+                self.wfile.write(b"Bot is running!")
+
+        port = int(os.environ.get("PORT", 8080))
+        server = HTTPServer(('0.0.0.0', port), SimpleHandler)
+        logger.info(f"HTTP сервер запущен на порту {port}")
+
+        # Держим работающим
+        import threading
+        server_thread = threading.Thread(target=server.serve_forever)
+        server_thread.daemon = True
+        server_thread.start()
+
+        # Ждём завершения
+        updater.idle()
 
     except Exception as e:
         logger.error(f"❌ Ошибка при запуске: {e}")
@@ -105,4 +134,3 @@ def main():
 # ========= ТОЧКА ВХОДА =========
 if __name__ == "__main__":
     main()
-
