@@ -1,106 +1,115 @@
-import logging
 import os
-from telegram.ext import Updater, CommandHandler, MessageHandler, Filters
+import logging
+import threading
+from telegram.ext import Updater, CommandHandler
+from flask import Flask
 
 # Настройка логирования
-logging.basicConfig(format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
-                    level=logging.INFO)
+logging.basicConfig(
+    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
+    level=logging.INFO
+)
 logger = logging.getLogger(__name__)
 
-# Токен бота
+# Получаем токен
 TOKEN = os.environ.get("TELEGRAM_TOKEN")
+if not TOKEN:
+    logger.error("❌ TELEGRAM_TOKEN не установлен!")
+    exit(1)
 
+# Создаем Flask приложение для веб-сервера
+app = Flask(__name__)
+
+@app.route('/')
+def home():
+    return "✅ Telegram Bot is running!", 200
+
+@app.route('/health')
+def health():
+    return "OK", 200
+
+# Функции бота
 def start(update, context):
-    """Ответ на команду /start"""
+    """Обработчик команды /start"""
     user = update.effective_user
     update.message.reply_text(
-        f"👋 Привет, {user.first_name}!\n"
-        f"Бот работает 24/7 🚀\n"
-        f"Команды: /help, /today"
+        f"🎉 Привет, {user.first_name}!\n"
+        f"🤖 Бот успешно запущен!\n"
+        f"📍 Сервер: Render.com\n"
+        f"📡 Статус: Онлайн 24/7\n\n"
+        f"📋 Команды:\n"
+        f"• /start - перезапуск\n"
+        f"• /today - ставки\n"
+        f"• /help - помощь"
     )
     logger.info(f"Пользователь {user.first_name} запустил бота")
 
-def help_command(update, context):
-    """Ответ на команду /help"""
-    update.message.reply_text(
-        "📋 Команды:\n"
-        "/start - перезапуск\n"
-        "/help - справка\n"
-        "/today - ставки на сегодня"
-    )
-
 def today(update, context):
-    """Ответ на команду /today"""
+    """Обработчик команды /today"""
     update.message.reply_text(
-        "📊 Ставки на сегодня:\n\n"
+        "📊 **СТАВКИ НА СЕГОДНЯ**\n\n"
         "⚽ Ливерпуль vs Арсенал\n"
-        "🎯 Тотал больше 2.5 | Кэф 2.10\n\n"
+        "🎯 Тотал больше 2.5\n"
+        "💰 Кэф: 2.10\n"
+        "🏆 Лига: АПЛ\n\n"
         "⚽ Барселона vs Реал\n"
-        "🎯 Обе забьют ДА | Кэф 1.80\n\n"
-        "⚽ Бавария vs Боруссия\n"
-        "🎯 Победа Баварии | Кэф 1.70\n\n"
-        "🔜 Скоро реальные коэффициенты!"
+        "🎯 Обе забьют: ДА\n"
+        "💰 Кэф: 1.80\n"
+        "🏆 Лига: Ла Лига\n\n"
+        "🔥 Скоро реальные аналитика!"
     )
 
-def echo(update, context):
-    """Ответ на любое сообщение"""
-    text = update.message.text
-    if "привет" in text.lower():
-        update.message.reply_text("Привет! Напиши /help")
-    elif "ставк" in text.lower() or "прогноз" in text.lower():
-        update.message.reply_text("Напиши /today для просмотра ставок")
-    else:
-        update.message.reply_text(f"Я не понял. Попробуй /help")
+def help_command(update, context):
+    """Обработчик команды /help"""
+    update.message.reply_text(
+        "📋 **СПРАВКА**\n\n"
+        "🤖 Я бот для поиска ценных ставок\n"
+        "📡 Работаю на сервере Render.com\n\n"
+        "📌 **Команды:**\n"
+        "• /start - запуск бота\n"
+        "• /today - ставки на сегодня\n"
+        "• /help - эта справка\n\n"
+        "📞 **Техподдержка:**\n"
+        "По всем вопросам пиши мне"
+    )
 
-def error(update, context):
-    """Логирование ошибок"""
-    logger.warning(f"Ошибка: {context.error}")
+def error_handler(update, context):
+    """Обработчик ошибок"""
+    logger.error(f"Ошибка: {context.error}")
+
+def run_flask():
+    """Запуск Flask сервера"""
+    port = int(os.environ.get("PORT", 8080))
+    app.run(host='0.0.0.0', port=port, debug=False)
 
 def main():
-    """Запуск бота"""
+    """Основная функция"""
     try:
-        # Создаем updater
+        # Создаем и запускаем Flask в отдельном потоке
+        flask_thread = threading.Thread(target=run_flask, daemon=True)
+        flask_thread.start()
+        logger.info(f"🌐 Flask сервер запущен на порту {os.environ.get('PORT', 8080)}")
+
+        # Создаем бота
         updater = Updater(TOKEN, use_context=True)
         dp = updater.dispatcher
 
-        # Команды
+        # Добавляем обработчики
         dp.add_handler(CommandHandler("start", start))
-        dp.add_handler(CommandHandler("help", help_command))
         dp.add_handler(CommandHandler("today", today))
+        dp.add_handler(CommandHandler("help", help_command))
+        dp.add_error_handler(error_handler)
 
-        # Текстовые сообщения
-        dp.add_handler(MessageHandler(Filters.text & ~Filters.command, echo))
-
-        # Обработчик ошибок
-        dp.add_error_handler(error)
-
-        # Запуск
-        logger.info("✅ Бот запущен!")
+        # Запускаем бота
+        logger.info("🤖 Telegram бот запускается...")
         updater.start_polling()
+        logger.info("✅ Бот успешно запущен и работает!")
 
-        # Держим процесс активным
-        if os.environ.get("PORT"):
-            # Для Render.com - имитируем веб-сервер
-            from http.server import HTTPServer, BaseHTTPRequestHandler
-            import threading
-
-            class Handler(BaseHTTPRequestHandler):
-                def do_GET(self):
-                    self.send_response(200)
-                    self.end_headers()
-                    self.wfile.write(b"Bot is running")
-
-            port = int(os.environ.get("PORT", 8080))
-            server = HTTPServer(('0.0.0.0', port), Handler)
-            thread = threading.Thread(target=server.serve_forever)
-            thread.daemon = True
-            thread.start()
-            logger.info(f"🌐 Сервер слушает порт {port}")
-
+        # Ждем
         updater.idle()
 
     except Exception as e:
-        logger.error(f"❌ Ошибка: {e}")
+        logger.error(f"❌ Критическая ошибка: {e}")
 
-if __name__ == '__main__':
+if __name__ == "__main__":
     main()
