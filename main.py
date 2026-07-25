@@ -4,7 +4,7 @@ from telegram import Update
 from telegram.ext import Application, CommandHandler, MessageHandler, filters, ContextTypes
 
 # ========= ТОКЕН =========
-TOKEN = os.environ.get("TELEGRAM_TOKEN")
+TOKEN = os.environ.get("8996710618:AAEBYipmbRh6GMz5yqLTrjmr9yXfIVcfFgY")
 
 # ========= НАСТРОЙКИ ЛОГИРОВАНИЯ =========
 logging.basicConfig(
